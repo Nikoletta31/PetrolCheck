@@ -265,3 +265,117 @@ meters (m)
 centimeters (cm)
 kilometers (km)
 millimeters (mm)
+
+# Réponse HTTP — Documentation API
+
+## Ligne de statut
+
+```
+HTTP/2 200 OK
+```
+
+---
+
+## En-têtes de réponse
+
+### Informations générales
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `server` | `openresty` | Serveur web utilisé |
+| `date` | `Thu, 16 Apr 2026 13:21:29 GMT` | Date et heure de la réponse |
+| `content-type` | `application/json; charset=utf-8` | Type de contenu retourné |
+| `content-length` | `3673` | Taille du corps de la réponse (en octets) |
+| `content-language` | `fr-fr` | Langue du contenu |
+
+---
+
+### Rate Limiting
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `x-ratelimit-remaining` | `19982` | Nombre de requêtes restantes dans la fenêtre courante |
+| `x-ratelimit-limit` | `20000` | Nombre maximum de requêtes autorisées par fenêtre |
+| `x-ratelimit-reset` | `2026-04-17 00:00:00+00:00` | Date/heure de réinitialisation du compteur (UTC) |
+
+> ⚠️ Une fois la limite atteinte (`x-ratelimit-remaining: 0`), les requêtes seront bloquées jusqu'à la date indiquée dans `x-ratelimit-reset`.
+
+---
+
+### Cache
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `cache-control` | `no-cache, no-store, max-age=0, must-revalidate` | La réponse ne doit pas être mise en cache |
+
+---
+
+### CORS (Cross-Origin Resource Sharing)
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `access-control-allow-origin` | `*` | Toutes les origines sont autorisées |
+| `access-control-allow-methods` | `POST, GET, OPTIONS` | Méthodes HTTP autorisées |
+| `access-control-max-age` | `1000` | Durée de mise en cache du preflight (en secondes) |
+| `access-control-allow-headers` | voir ci-dessous | En-têtes autorisés dans les requêtes |
+| `access-control-expose-headers` | voir ci-dessous | En-têtes exposés au client |
+
+#### En-têtes autorisés (`access-control-allow-headers`)
+
+```
+Authorization
+X-Requested-With
+Origin
+ODS-API-Analytics-App
+ODS-API-Analytics-Embed-Type
+ODS-API-Analytics-Embed-Referrer
+ODS-Widgets-Version
+Accept
+```
+
+#### En-têtes exposés (`access-control-expose-headers`)
+
+```
+ODS-Explore-API-Deprecation
+Link
+X-RateLimit-Remaining
+X-RateLimit-Limit
+X-RateLimit-Reset
+X-RateLimit-dataset-Remaining
+X-RateLimit-dataset-Limit
+X-RateLimit-dataset-Reset
+```
+
+---
+
+### Sécurité
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `strict-transport-security` | `max-age=31536000; includeSubdomains` | Force HTTPS pendant 1 an, sous-domaines inclus (HSTS) |
+| `x-content-type-options` | `nosniff` | Empêche le sniffing de type MIME |
+| `x-frame-options` | `DENY` | Interdit l'intégration dans une `<iframe>` |
+| `referrer-policy` | `strict-origin-when-cross-origin` | Limite les informations de referrer cross-origin |
+| `x-ua-compatible` | `IE=edge` | Force le mode de rendu Edge pour IE |
+| `permissions-policy` | voir ci-dessous | Restreint l'accès aux APIs du navigateur |
+
+#### Permissions Policy
+
+| Fonctionnalité | Valeur | Description |
+|---|---|---|
+| `midi` | `()` | Désactivé |
+| `microphone` | `()` | Désactivé |
+| `camera` | `()` | Désactivé |
+| `magnetometer` | `()` | Désactivé |
+| `gyroscope` | `()` | Désactivé |
+| `fullscreen` | `(self)` | Autorisé uniquement pour la même origine |
+| `payment` | `()` | Désactivé |
+
+---
+
+### Divers
+
+| En-tête | Valeur | Description |
+|---|---|---|
+| `vary` | `Accept-Language, Cookie, Host` | Paramètres influençant la réponse mise en cache |
+| `x-datadog-trace-id` | `18394720694706046605` | Identifiant de trace Datadog (usage interne) |
