@@ -84,6 +84,8 @@ function onClosePopup() {
   flex: 1;
   position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-banner {
