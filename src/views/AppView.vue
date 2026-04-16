@@ -3,21 +3,25 @@ import { ref } from 'vue'
 import SearchForm from '@/components/SearchForm.vue'
 import MapView from '@/components/MapView.vue'
 import StationPopup from '@/components/StationPopup.vue'
+import StationList from '@/components/StationList.vue'
 import { useStations } from '@/composables/useStations.js'
 
-const { stations, topCheap, loading, error, go } = useStations()
+const { stations, topCheap, sortedStations, primaryFuel, searchCoords, loading, error, go } = useStations()
 
 const mapCenter = ref(null)
 const selectedStation = ref(null)
+const focusStation = ref(null)
 
 function onSearch({ coords, filters }) {
   mapCenter.value = coords
   selectedStation.value = null
+  focusStation.value = null
   go(coords, filters)
 }
 
 function onSelectStation(station) {
   selectedStation.value = station
+  focusStation.value = station
 }
 
 function onClosePopup() {
@@ -42,12 +46,23 @@ function onClosePopup() {
       </div>
     </Transition>
 
-    <MapView
-      :stations="stations"
-      :center="mapCenter"
-      :top-cheap="topCheap"
-      @select-station="onSelectStation"
-    />
+    <div class="map-container">
+      <StationList
+        :stations="sortedStations"
+        :top-cheap="topCheap"
+        :primary-fuel="primaryFuel"
+        :search-coords="searchCoords"
+        @select-station="onSelectStation"
+      />
+
+      <MapView
+        :stations="stations"
+        :center="mapCenter"
+        :top-cheap="topCheap"
+        :focus-station="focusStation"
+        @select-station="onSelectStation"
+      />
+    </div>
 
     <StationPopup
       :station="selectedStation"
@@ -63,6 +78,12 @@ function onClosePopup() {
   height: 100%;
   width: 100%;
   position: relative;
+}
+
+.map-container {
+  flex: 1;
+  position: relative;
+  min-height: 0;
 }
 
 .app-banner {

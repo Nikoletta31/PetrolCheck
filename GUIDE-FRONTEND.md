@@ -15,11 +15,16 @@ src/
 ├── services/
 │   ├── geocodeAPI.js             ← Appel API adresse (ne pas toucher)
 │   ├── stationsAPI.js            ← Appel API carburant (ne pas toucher)
-│   └── filters.js                ← Transformation données (ne pas toucher)
-└── composables/
-    ├── useSearch.js              ← À consommer pour le formulaire
-    ├── useFilters.js             ← À consommer pour les filtres
-    └── useStations.js            ← À consommer pour la carte
+│   └── filters.js                ← Transformation + tri + distance
+├── composables/
+│   ├── useSearch.js              ← À consommer pour le formulaire
+│   ├── useFilters.js             ← À consommer pour les filtres
+│   └── useStations.js            ← À consommer pour la carte + liste
+└── components/
+    ├── SearchForm.vue            ← Formulaire adresse + filtres + bouton GO
+    ├── MapView.vue               ← Carte Leaflet avec markers
+    ├── StationList.vue           ← Liste triée des stations (prix + distance)
+    └── StationPopup.vue          ← Détail d'une station
 ```
 
 **Règle** : Ne pas modifier `services/` ni `composables/`. L'interface entre les deux parties, ce sont les composables.
@@ -171,35 +176,19 @@ import { useStations } from './composables/useStations.js'
 ### API
 
 ```js
-const { stations, topCheap, loading, error, go } = useStations()
+const { stations, topCheap, sortedStations, primaryFuel, searchCoords, loading, error, go } = useStations()
 ```
 
 | Variable / Fonction | Type | Description |
 |---|---|---|
-| `stations` | `ref<Station[]>` | Liste des stations trouvées |
-| `topCheap` | `computed<Set<number>>` | Set des IDs des 3 stations les moins chères |
+| `stations` | `ref<Station[]>` | Liste des stations trouvées (non triées) |
+| `topCheap` | `computed<Map<number, number>>` | Map `id → rank` des 3 stations les moins chères (ex: `.get(id)` retourne 1, 2 ou 3) |
+| `sortedStations` | `computed<Station[]>` | Stations triées par prix ASC puis distance ASC |
+| `primaryFuel` | `ref<string>` | Carburant de référence pour le classement (ex: `'SP95'`) |
+| `searchCoords` | `ref<{lat, lng} \| null>` | Coordonnées du centre de recherche (utilisées pour le calcul de distance) |
 | `loading` | `ref<boolean>` | `true` pendant la requête |
 | `error` | `ref<string \| null>` | Message d'erreur si la requête échoue |
 | `go(coords, filters)` | `function` | Déclenche la recherche |
-
-### Structure d'une Station
-
-```js
-{
-  id: 29300002,                    // number — ID unique
-  nom: "Station #29300002",        // string — temporaire (id seul)
-  adresse: "Rue du Pont Aven",     // string
-  ville: "Quimperlé",              // string
-  lat: 47.871,                     // number
-  lng: -3.567,                     // number
-  maj: "2026-04-16T00:50:00+00:00",// string — ISO 8601, date la plus récente
-  carburants: [                    // array
-    { type: "SP95", prix: 1.98, dispo: true, maj: "2026-04-16T00:50:00+00:00" },
-    { type: "E85", prix: null, dispo: false, maj: null },
-    // ...
-  ]
-}
-```
 
 ### Exemple d'utilisation
 
@@ -211,7 +200,7 @@ import { useStations } from '../composables/useStations.js'
 
 const { selectedCoords } = useSearch()
 const { filters } = useFilters()
-const { stations, topCheap, loading, error, go } = useStations()
+const { stations, topCheap, sortedStations, primaryFuel, searchCoords, loading, error, go } = useStations()
 
 function handleGo() {
   if (selectedCoords.value) {
@@ -228,25 +217,157 @@ function handleGo() {
   <div v-if="loading">Chargement...</div>
   <div v-if="error">{{ error }}</div>
 
-  <div v-for="station in stations" :key="station.id">
-    <div :class="{ 'cheap-marker': topCheap.has(station.id) }">
-      {{ station.nom }} — {{ station.ville }}
+  <!-- Liste triée avec classement -->
+  <div v-for="station in sortedStations" :key="station.id">
+    <div v-if="topCheap.has(station.id)" class="rank-badge">
+      #{{ topCheap.get(station.id) }}
     </div>
+    {{ station.nom }} — {{ station.ville }}
   </div>
+
+  <!-- Carte avec markers -->
+  <MapView
+    :stations="stations"
+    :top-cheap="topCheap"
+    @select-station="onSelectStation"
+  />
 </template>
 ```
 
 ### Notes importantes
 
 - `go()` **ne fait rien** si `coords` est `null` ou `undefined`.
-- `topCheap` est un **Set** → utiliser `topCheap.has(station.id)` pour vérifier.
-- Le carburant de référence pour le classement est le **premier de `filters.carburants`**, ou `SP95` si aucun filtre.
+- `topCheap` est une **Map** → utiliser `topCheap.has(station.id)` pour vérifier l'appartenance, `topCheap.get(station.id)` pour obtenir le rang (1, 2 ou 3).
+- `sortedStations` contient **toutes** les stations triées par prix du carburant principal ASC, puis distance ASC (les stations sans le carburant principal sont en fin de liste).
+- `primaryFuel` est le **premier de `filters.carburants`**, ou `SP95` si aucun filtre.
+- `searchCoords` est automatiquement renseigné quand `go()` est appelé — sert à calculer les distances dans `sortedStations`.
 - `loading` passe à `true` au début de la requête, `false` à la fin (succès ou erreur).
 - `error` est `null` en cas de succès.
 
 ---
 
-## 4. Constantes utiles
+## 4. Liste des stations — `StationList.vue`
+
+### Import
+
+```vue
+<script setup>
+import StationList from '@/components/StationList.vue'
+</script>
+```
+
+### Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `stations` | `Station[]` | Liste triée des stations (passer `sortedStations`) |
+| `topCheap` | `Map<number, number>` | Map des rangons (passer `topCheap`) |
+| `primaryFuel` | `string` | Carburant de référence (passer `primaryFuel`) |
+| `searchCoords` | `{lat, lng} \| null` | Centre de recherche pour le calcul de distance |
+
+### Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `select-station` | `Station` | Émis quand l'utilisateur clique sur une station dans la liste |
+
+### Comportement
+
+- **Desktop** : panneau latéral gauche de 300px, superposé à la carte
+- **Mobile** : panneau en bas de l'écran (bottom sheet), hauteur max 50vh
+- **Collapsible** : un bouton toggle permet de réduire/agrandir le panneau
+- **Classement visuel** : les 3 stations les moins chères ont un badge numéroté (1, 2, 3)
+- **Clic** : émet `select-station` → le parent doit centrer la carte et ouvrir le popup
+
+### Exemple d'utilisation
+
+```vue
+<template>
+  <div class="map-container">
+    <StationList
+      :stations="sortedStations"
+      :top-cheap="topCheap"
+      :primary-fuel="primaryFuel"
+      :search-coords="searchCoords"
+      @select-station="onSelectStation"
+    />
+    <MapView :stations="stations" :top-cheap="topCheap" @select-station="onSelectStation" />
+  </div>
+</template>
+```
+
+---
+
+## 5. Carte — `MapView.vue`
+
+### Props ajoutées
+
+| Prop | Type | Description |
+|---|---|---|
+| `stations` | `Station[]` | Liste des stations à afficher |
+| `center` | `{lat, lng} \| null` | Centre de la carte après recherche (zoom 13) |
+| `topCheap` | `Map<number, number>` | Map des rangons pour les markers numérotés |
+| `focusStation` | `Station \| null` | Station sur laquelle zoomer (zoom 16) |
+
+### Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `select-station` | `Station` | Émis quand l'utilisateur clique sur un marker |
+
+### Markers
+
+- **Station normale** : marker bleu avec goutte de carburant
+- **Top 3 pas chères** : marker vert avec badge numéroté (1, 2, 3) en haut à droite
+- Le numéro correspond au rang dans `topCheap.get(station.id)`
+
+### focusStation
+
+Quand `focusStation` change, la carte fait un `flyTo` sur la station avec zoom 16. À utiliser quand l'utilisateur clique sur une station dans la liste `StationList`.
+
+### Exemple d'utilisation
+
+```vue
+<template>
+  <MapView
+    :stations="stations"
+    :center="mapCenter"
+    :top-cheap="topCheap"
+    :focus-station="focusStation"
+    @select-station="onSelectStation"
+  />
+</template>
+```
+
+---
+
+## 6. Fonctions utilitaires — `filters.js`
+
+### Import
+
+```js
+import {
+  computeDistance,
+  sortStationsByPriceAndDistance,
+  findTopCheapStations,
+} from '@/services/filters.js'
+```
+
+### `computeDistance(lat1, lng1, lat2, lng2)`
+
+Retourne la distance en **km** entre deux points (formule Haversine).
+
+### `sortStationsByPriceAndDistance(stations, primaryFuel, centerLat, centerLng)`
+
+Retourne les stations triées par **prix ASC** du carburant principal, puis **distance ASC** en cas d'égalité. Les stations sans le carburant principal sont poussées en fin de liste.
+
+### `findTopCheapStations(stations, primaryFuel, centerLat, centerLng)`
+
+Retourne une **Map<id, rank>** des N stations les moins chères (N = `TOP_CHEAP_COUNT`). Le rank est 1-indexé.
+
+---
+
+## 7. Constantes utiles
 
 ### Import
 
@@ -270,7 +391,7 @@ import {
 
 ---
 
-## 5. Flow complet attendu
+## 8. Flow complet attendu
 
 ```
 1. L'utilisateur tape une adresse
@@ -292,22 +413,30 @@ import {
 
 5. L'utilisateur clique sur GO
    → go(selectedCoords, filters) est appelé
+   → searchCoords est enregistré
    → loading = true
    → Les APIs sont appelées
-   → stations et topCheap sont mis à jour
+   → stations, sortedStations et topCheap sont mis à jour
    → loading = false
 
 6. La carte affiche les markers
    → Pour chaque station dans stations : marker à (lat, lng)
-   → Si topCheap.has(station.id) : marker vert (sinon bleu)
+   → Si topCheap.has(station.id) : marker vert avec numéro (1, 2, 3)
+   → Sinon : marker bleu classique
 
-7. L'utilisateur clique sur un marker
-   → Popup avec nom, adresse, date MAJ, tableau des carburants
+7. La liste StationList s'affiche
+   → Stations triées par prix ASC, puis distance ASC
+   → Les 3 premières ont un badge numéroté
+   → Chaque ligne montre : rang, nom, ville, distance, prix
+
+8. L'utilisateur clique sur un marker ou une ligne de la liste
+   → La carte fait un flyTo sur la station (zoom 16)
+   → Le popup StationPopup s'ouvre avec les détails
 ```
 
 ---
 
-## 6. Cas d'erreur à gérer côté UI
+## 9. Cas d'erreur à gérer côté UI
 
 | Situation | Comment détecter | Suggestion UI |
 |---|---|---|
@@ -319,7 +448,7 @@ import {
 
 ---
 
-## 7. Dépendances à installer
+## 10. Dépendances à installer
 
 Si pas encore fait :
 
@@ -337,7 +466,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
 ---
 
-## 8. Questions en suspens
+## 11. Questions en suspens
 
 Voir `TODO-BACKEND.md` pour la liste complète des questions ouvertes, notamment :
 

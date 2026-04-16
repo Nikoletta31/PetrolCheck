@@ -3,6 +3,7 @@ import { fetchStations } from "../services/stationsAPI.js";
 import {
   mapApiRecordToStation,
   findTopCheapStations,
+  sortStationsByPriceAndDistance,
   filterStationsByFuelTypes,
   filterStationsByMaxPrix,
 } from "../services/filters.js";
@@ -13,9 +14,24 @@ export function useStations() {
   const loading = ref(false);
   const error = ref(null);
   const primaryFuel = ref(FUEL_TYPES[0]);
+  const searchCoords = ref(null);
 
   const topCheap = computed(() => {
-    return findTopCheapStations(stations.value, primaryFuel.value);
+    return findTopCheapStations(
+      stations.value,
+      primaryFuel.value,
+      searchCoords.value?.lat,
+      searchCoords.value?.lng,
+    );
+  });
+
+  const sortedStations = computed(() => {
+    return sortStationsByPriceAndDistance(
+      stations.value,
+      primaryFuel.value,
+      searchCoords.value?.lat,
+      searchCoords.value?.lng,
+    );
   });
 
   async function go(coords, filters) {
@@ -24,6 +40,7 @@ export function useStations() {
       return;
     }
 
+    searchCoords.value = coords;
     loading.value = true;
     error.value = null;
     stations.value = [];
@@ -57,5 +74,5 @@ export function useStations() {
     }
   }
 
-  return { stations, topCheap, loading, error, go };
+  return { stations, topCheap, sortedStations, primaryFuel, searchCoords, loading, error, go };
 }
