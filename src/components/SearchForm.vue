@@ -1,48 +1,27 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useSearch } from '../composables/useSearch.js'
 import { useFilters } from '../composables/useFilters.js'
+import { FUEL_TYPES, RADIUS_OPTIONS } from '../config/constants.js'
 
 const emit = defineEmits(['go'])
 
-const { query, suggestions, selectedCoords, search, select } = useSearch()
-const { filters } = useFilters()
+const { query, suggestions, selectedCoords, search, select, clear } = useSearch()
+const { filters, toggleCarburant, setRayon } = useFilters()
 
 const showDropdown = ref(false)
 const inputRef = ref(null)
 
-const FUELS = ['SP95', 'SP98', 'Gazole', 'E85', 'GPLc']
-const RADIUS_OPTIONS = [5, 10, 20, 50]
-
-// Fire search after 3 chars
-watch(query, (val) => {
-  if (val.length >= 3) {
-    search(val)
-    showDropdown.value = true
-  } else {
-    showDropdown.value = false
-  }
-})
-
 function onInput(e) {
-  query.value = e.target.value
-  // Clear selectedCoords if user is typing again
-  selectedCoords.value = null
+  // Clear coords when user edits the address field
+  if (selectedCoords.value) clear()
+  search(e.target.value)
+  showDropdown.value = true
 }
 
 function onSelectSuggestion(suggestion) {
-  select(suggestion)
-  query.value = suggestion.label
+  select(suggestion)        // sets selectedCoords + query internally
   showDropdown.value = false
-}
-
-function toggleFuel(fuel) {
-  const idx = filters.carburants.indexOf(fuel)
-  if (idx === -1) {
-    filters.carburants.push(fuel)
-  } else {
-    filters.carburants.splice(idx, 1)
-  }
 }
 
 function onGo() {
@@ -105,12 +84,12 @@ function onKeydown(e) {
         <span class="label">Carburant</span>
         <div class="pill-group">
           <button
-            v-for="fuel in FUELS"
+            v-for="fuel in FUEL_TYPES"
             :key="fuel"
             type="button"
             class="pill"
             :class="{ 'pill--active': filters.carburants.includes(fuel) }"
-            @click="toggleFuel(fuel)"
+            @click="toggleCarburant(fuel)"
           >
             {{ fuel }}
           </button>
@@ -120,7 +99,7 @@ function onKeydown(e) {
       <!-- Radius selector -->
       <div class="radius-field">
         <label class="label" for="radius-select">Rayon</label>
-        <select id="radius-select" v-model="filters.rayon" class="select">
+        <select id="radius-select" :value="filters.rayon" class="select" @change="setRayon(Number($event.target.value))">
           <option v-for="r in RADIUS_OPTIONS" :key="r" :value="r">{{ r }} km</option>
         </select>
       </div>

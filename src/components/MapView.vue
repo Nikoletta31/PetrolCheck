@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet.markercluster'
+import { FRANCE_CENTER, FRANCE_ZOOM } from '../config/constants.js'
 
 const props = defineProps({
   stations: {
@@ -12,9 +13,10 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  // Set<number> from useStations — use .has() not .includes()
   topCheap: {
-    type: Array,
-    default: () => []
+    type: Set,
+    default: () => new Set()
   }
 })
 
@@ -24,23 +26,61 @@ const mapContainer = ref(null)
 let map = null
 let clusterGroup = null
 
+const BLUE = '#378ADD'
+const GREEN = '#1D9E75'
+
+// Standard teardrop pin with a fuel-drop symbol inside
 function createMarkerIcon(color) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+      <filter id="s" x="-30%" y="-10%" width="160%" height="140%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.25)"/>
+      </filter>
+      <!-- Pin body -->
+      <path d="M14 2 C7.373 2 2 7.373 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.373 20.627 2 14 2 Z"
+            fill="${color}" filter="url(#s)"/>
+      <!-- White circle -->
+      <circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/>
+      <!-- Fuel drop -->
+      <path d="M14 9.5 C14 9.5 10.5 13.5 10.5 15.5 C10.5 17.433 12.067 19 14 19 C15.933 19 17.5 17.433 17.5 15.5 C17.5 13.5 14 9.5 14 9.5 Z"
+            fill="${color}"/>
+    </svg>`
   return L.divIcon({
     className: '',
-    html: `<div style="
-      width:14px; height:14px;
-      background:${color};
-      border:2px solid white;
-      border-radius:50%;
-      box-shadow:0 1px 4px rgba(0,0,0,0.3)
-    "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7]
+    html: svg,
+    iconSize: [28, 36],
+    iconAnchor: [14, 34],
+    popupAnchor: [0, -34]
   })
 }
 
-const BLUE = '#378ADD'
-const GREEN = '#1D9E75'
+// Cheap pin: same shape with a star badge in the top-right corner
+function createCheapMarkerIcon(color) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+      <filter id="s2" x="-30%" y="-10%" width="160%" height="140%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.3)"/>
+      </filter>
+      <!-- Pin body -->
+      <path d="M14 2 C7.373 2 2 7.373 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.373 20.627 2 14 2 Z"
+            fill="${color}" filter="url(#s2)"/>
+      <!-- White circle -->
+      <circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/>
+      <!-- Fuel drop -->
+      <path d="M14 9.5 C14 9.5 10.5 13.5 10.5 15.5 C10.5 17.433 12.067 19 14 19 C15.933 19 17.5 17.433 17.5 15.5 C17.5 13.5 14 9.5 14 9.5 Z"
+            fill="${color}"/>
+      <!-- Star badge top-right -->
+      <circle cx="25" cy="7" r="7" fill="#F5A623" stroke="white" stroke-width="1.5"/>
+      <text x="25" y="11" text-anchor="middle" font-size="9" fill="white" font-family="sans-serif">★</text>
+    </svg>`
+  return L.divIcon({
+    className: '',
+    html: svg,
+    iconSize: [32, 40],
+    iconAnchor: [14, 38],
+    popupAnchor: [0, -38]
+  })
+}
 
 function clearMarkers() {
   if (clusterGroup) {
@@ -51,30 +91,30 @@ function clearMarkers() {
 function addMarkers(stations) {
   if (!map || !clusterGroup) return
 
-  stations.forEach((station) => {
-    if (station.lat == null || station.lng == null) return
+  const validStations = stations.filter(s => s.lat != null && s.lng != null)
 
-    const isCheap = props.topCheap.includes(station.id)
-    const icon = createMarkerIcon(isCheap ? GREEN : BLUE)
-
+  validStations.forEach((station) => {
+    const isCheap = props.topCheap.has(station.id)
+    const icon = isCheap ? createCheapMarkerIcon(GREEN) : createMarkerIcon(BLUE)
     const marker = L.marker([station.lat, station.lng], { icon })
     marker.on('click', () => emit('select-station', station))
     clusterGroup.addLayer(marker)
   })
 
-  if (stations.length > 0) {
-    try {
-      map.fitBounds(clusterGroup.getBounds(), { padding: [40, 40], maxZoom: 14 })
-    } catch {
-      // getBounds can throw if all markers are at same point
-    }
+  if (validStations.length > 0) {
+    // Build bounds from raw coords — more reliable than clusterGroup.getBounds()
+    // which can return empty/invalid bounds before the cluster finishes processing.
+    const bounds = L.latLngBounds(validStations.map(s => [s.lat, s.lng]))
+    // Stop any in-progress flyTo so fitBounds is not ignored.
+    map.stop()
+    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 })
   }
 }
 
 onMounted(() => {
   map = L.map(mapContainer.value, {
-    center: [46.5, 2.35],
-    zoom: 6,
+    center: [FRANCE_CENTER.lat, FRANCE_CENTER.lng],
+    zoom: FRANCE_ZOOM,
     zoomControl: true
   })
 
