@@ -24,5 +24,11 @@ export const GEOCODE_MIN_QUERY_LENGTH = 3
 export const STATIONS_MAX_LIMIT = 100
 export const TOP_CHEAP_COUNT = 3
 
+export const MAX_PRIX_MIN = 1.0
+export const MAX_PRIX_MAX = 3.0
+export const MAX_PRIX_STEP = 0.1
+// null means "no filter" — slider at its maximum position
+export const MAX_PRIX_DEFAULT = null
+
 export const FRANCE_CENTER = { lat: 46.603354, lng: 1.888334 }
 export const FRANCE_ZOOM = 6

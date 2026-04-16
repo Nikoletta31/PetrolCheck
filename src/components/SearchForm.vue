@@ -1,13 +1,26 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useSearch } from '../composables/useSearch.js'
 import { useFilters } from '../composables/useFilters.js'
-import { FUEL_TYPES, RADIUS_OPTIONS } from '../config/constants.js'
+import { FUEL_TYPES, RADIUS_OPTIONS, MAX_PRIX_MIN, MAX_PRIX_MAX, MAX_PRIX_STEP } from '../config/constants.js'
 
 const emit = defineEmits(['go'])
 
 const { query, suggestions, selectedCoords, search, select, clear } = useSearch()
-const { filters, toggleCarburant, setRayon } = useFilters()
+const { filters, toggleCarburant, setRayon, setMaxPrix } = useFilters()
+
+// Slider local state — initialized to MAX (= no filter)
+const sliderValue = ref(MAX_PRIX_MAX)
+
+const priceLabel = computed(() =>
+  sliderValue.value >= MAX_PRIX_MAX ? 'Tous' : `≤ ${sliderValue.value.toFixed(2)} €/L`
+)
+
+function onSliderInput(e) {
+  const val = parseFloat(e.target.value)
+  sliderValue.value = val
+  setMaxPrix(val >= MAX_PRIX_MAX ? null : val)
+}
 
 const showDropdown = ref(false)
 const inputRef = ref(null)
@@ -93,6 +106,31 @@ function onKeydown(e) {
           >
             {{ fuel }}
           </button>
+        </div>
+      </div>
+
+      <!-- Max price slider -->
+      <div class="price-field">
+        <div class="price-field__header">
+          <span class="label">Prix max</span>
+          <span class="price-field__value" :class="{ 'price-field__value--active': sliderValue < MAX_PRIX_MAX }">
+            {{ priceLabel }}
+          </span>
+        </div>
+        <input
+          id="price-slider"
+          type="range"
+          class="slider"
+          :min="MAX_PRIX_MIN"
+          :max="MAX_PRIX_MAX"
+          :step="MAX_PRIX_STEP"
+          :value="sliderValue"
+          :style="`--slider-pct: ${((sliderValue - MAX_PRIX_MIN) / (MAX_PRIX_MAX - MAX_PRIX_MIN) * 100).toFixed(1)}`"
+          @input="onSliderInput"
+        />
+        <div class="price-field__ticks">
+          <span>{{ MAX_PRIX_MIN.toFixed(0) }} €</span>
+          <span>{{ MAX_PRIX_MAX.toFixed(0) }} €</span>
         </div>
       </div>
 
@@ -214,6 +252,91 @@ function onKeydown(e) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Price slider */
+.price-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+@media (min-width: 768px) {
+  .price-field {
+    flex: 0 0 160px;
+  }
+}
+
+.price-field__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.price-field__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted);
+  transition: color var(--transition);
+}
+
+.price-field__value--active {
+  color: var(--color-accent);
+}
+
+.price-field__ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0%,
+    var(--color-accent) calc((var(--slider-pct, 100)) * 1%),
+    var(--color-border) calc((var(--slider-pct, 100)) * 1%),
+    var(--color-border) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform var(--transition);
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.slider:hover::-webkit-slider-thumb,
+.slider:focus::-webkit-slider-thumb {
+  transform: scale(1.2);
 }
 
 /* GO button full-width on mobile */

@@ -4,6 +4,7 @@ import {
   mapApiRecordToStation,
   findTopCheapStations,
   filterStationsByFuelTypes,
+  filterStationsByMaxPrix,
 } from "../services/filters.js";
 import { FUEL_TYPES } from "../config/constants.js";
 
@@ -33,11 +34,13 @@ export function useStations() {
         lng: coords.lng,
         radius: filters.rayon,
         fuelTypes: filters.carburants,
+        maxPrix: filters.maxPrix,
       });
 
       let mapped = records.map(mapApiRecordToStation);
 
       mapped = filterStationsByFuelTypes(mapped, filters.carburants);
+      mapped = filterStationsByMaxPrix(mapped, filters.maxPrix, filters.carburants);
 
       if (filters.carburants && filters.carburants.length > 0) {
         primaryFuel.value = filters.carburants[0];

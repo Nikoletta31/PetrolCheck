@@ -1,9 +1,22 @@
-import { STATIONS_API_URL, STATIONS_MAX_LIMIT } from '../config/constants.js'
+import {
+  STATIONS_API_URL,
+  STATIONS_MAX_LIMIT,
+  FUEL_FIELD_MAP,
+  FUEL_TYPES,
+} from '../config/constants.js'
 
-export async function fetchStations({ lat, lng, radius, fuelTypes }) {
+export async function fetchStations({ lat, lng, radius, fuelTypes, maxPrix }) {
   const whereClauses = [
     `within_distance(geom, GEOM'POINT(${lng} ${lat})', ${radius}km)`,
   ]
+
+  // Price filter: keep only stations where at least one relevant fuel is <= maxPrix.
+  // Applied server-side to reduce payload before client-side re-check in filters.js.
+  if (maxPrix != null) {
+    const fuelsToCheck = fuelTypes && fuelTypes.length > 0 ? fuelTypes : FUEL_TYPES
+    const priceClauses = fuelsToCheck.map(f => `${FUEL_FIELD_MAP[f]}_prix <= ${maxPrix}`)
+    whereClauses.push(`(${priceClauses.join(' OR ')})`)
+  }
 
   const params = new URLSearchParams({
     where: whereClauses.join(' AND '),
